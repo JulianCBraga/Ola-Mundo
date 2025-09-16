@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Campo Minado com IA</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --cell-size: 28px;
+            --border-light: #fff;
+            --border-dark: #7b7b7b;
+            --bg-color: #c0c0c0;
+            --text-red: #ff0000;
+            --highlight-color: rgba(76, 175, 80, 0.7);
+        }
+
+        body {
+            background-color: #008080;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            font-family: 'VT323', monospace;
+            font-size: 24px;
+            padding: 1rem 0;
+        }
+
+        .game-container {
+            background-color: var(--bg-color);
+            border-top: 2px solid var(--border-light);
+            border-left: 2px solid var(--border-light);
+            border-right: 2px solid var(--border-dark);
+            border-bottom: 2px solid var(--border-dark);
+            padding: 8px;
+            min-width: 320px;
+        }
+        
+        .controls-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .difficulty-selector {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .difficulty-selector button, #hint-button {
+            font-family: 'VT323', monospace;
+            font-size: 18px;
+            padding: 5px 10px;
+            border-top: 2px solid var(--border-light);
+            border-left: 2px solid var(--border-light);
+            border-right: 2px solid var(--border-dark);
+            border-bottom: 2px solid var(--border-dark);
+            background-color: var(--bg-color);
+            cursor: pointer;
+        }
+        
+        #hint-button {
+            background-color: #dfb7ff;
+        }
+
+        .difficulty-selector button:active, #hint-button:active {
+            border-top: 2px solid var(--border-dark);
+            border-left: 2px solid var(--border-dark);
+            border-right: 2px solid var(--border-light);
+            border-bottom: 2px solid var(--border-light);
+        }
+        
+        #hint-button:disabled {
+            background-color: #aaa;
+            cursor: not-allowed;
+            color: #777;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: var(--bg-color);
+            border-top: 2px solid var(--border-dark);
+            border-left: 2px solid var(--border-dark);
+            border-right: 2px solid var(--border-light);
+            border-bottom: 2px solid var(--border-light);
+            padding: 6px;
+            margin-bottom: 8px;
+        }
+
+        .counter, .timer {
+            background-color: #000;
+            color: var(--text-red);
+            padding: 2px 6px;
+            min-width: 60px;
+            text-align: right;
+            border: 1px inset #7b7b7b;
+        }
+
+        .reset-button {
+            width: 36px;
+            height: 36px;
+            font-size: 28px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-top: 2px solid var(--border-light);
+            border-left: 2px solid var(--border-light);
+            border-right: 2px solid var(--border-dark);
+            border-bottom: 2px solid var(--border-dark);
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .reset-button:active {
+            border-top: 2px solid var(--border-dark);
+            border-left: 2px solid var(--border-dark);
+            border-right: 2px solid var(--border-light);
+            border-bottom: 2px solid var(--border-light);
+        }
+
+        .grid {
+            display: grid;
+            border-top: 2px solid var(--border-dark);
+            border-left: 2px solid var(--border-dark);
+            border-right: 2px solid var(--border-light);
+            border-bottom: 2px solid var(--border-light);
+        }
+
+        .cell {
+            width: var(--cell-size);
+            height: var(--cell-size);
+            background-color: var(--bg-color);
+            border-top: 2px solid var(--border-light);
+            border-left: 2px solid var(--border-light);
+            border-right: 2px solid var(--border-dark);
+            border-bottom: 2px solid var(--border-dark);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 22px;
+            font-weight: bold;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+        }
+
+        .cell.revealed {
+            background-color: #c0c0c0;
+            border: 1px solid #7b7b7b;
+        }
+        
+        .cell.mine-hit {
+            background-color: red;
+        }
+        
+        .cell.hint-highlight::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--highlight-color);
+            animation: pulse 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 0.7; }
+            50% { opacity: 0.3; }
+            100% { opacity: 0.7; }
+        }
+
+        .c1 { color: #0000ff; }
+        .c2 { color: #008000; }
+        .c3 { color: #ff0000; }
+        .c4 { color: #000080; }
+        .c5 { color: #800000; }
+        .c6 { color: #008080; }
+        .c7 { color: #000000; }
+        .c8 { color: #808080; }
+
+        /* Modal para a dica da IA */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background-color: var(--bg-color);
+            padding: 20px;
+            border-top: 2px solid var(--border-light);
+            border-left: 2px solid var(--border-light);
+            border-right: 2px solid var(--border-dark);
+            border-bottom: 2px solid var(--border-dark);
+            max-width: 300px;
+            text-align: center;
+        }
+        
+        .modal-content h3 {
+            margin-top: 0;
+            font-size: 24px;
+        }
+        
+        .modal-content p {
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+
+        .modal-content button {
+            font-family: 'VT323', monospace;
+            font-size: 18px;
+            padding: 5px 15px;
+            border-top: 2px solid var(--border-light);
+            border-left: 2px solid var(--border-light);
+            border-right: 2px solid var(--border-dark);
+            border-bottom: 2px solid var(--border-dark);
+            background-color: var(--bg-color);
+            cursor: pointer;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="controls-container">
+            <div class="difficulty-selector">
+                <button id="easy">Fácil (9x9)</button>
+                <button id="medium">Médio (16x16)</button>
+                <button id="hard">Difícil (30x16)</button>
+            </div>
+             <button id="hint-button" disabled>✨ Dica Inteligente</button>
+        </div>
+        <div class="header">
+            <div id="mine-counter" class="counter">010</div>
+            <div id="reset-button" class="reset-button">🙂</div>
+            <div id="timer" class="timer">000</div>
+        </div>
+        <div id="grid" class="grid"></div>
+    </div>
+    
+    <div id="hint-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h3>Dica da IA</h3>
+            <p id="hint-reasoning"></p>
+            <button id="close-modal-button">Percebi!</button>
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIGURAÇÕES DE DIFICULDADE ---
+        const DIFFICULTIES = {
+            easy:   { rows: 9,  cols: 9,  mines: 10 },
+            medium: { rows: 16, cols: 16, mines: 40 },
+            hard:   { rows: 16, cols: 30, mines: 99 }
+        };
+
+        // --- ELEMENTOS DO DOM ---
+        const gridEl = document.getElementById('grid');
+        const mineCounterEl = document.getElementById('mine-counter');
+        const timerEl = document.getElementById('timer');
+        const resetButtonEl = document.getElementById('reset-button');
+        const hintButton = document.getElementById('hint-button');
+        const hintModal = document.getElementById('hint-modal');
+        const hintReasoningEl = document.getElementById('hint-reasoning');
+        const closeModalButton = document.getElementById('close-modal-button');
+        
+        // --- VARIÁVEIS DE ESTADO DO JOGO ---
+        let currentDifficulty = 'easy';
+        let board = [];
+        let mineLocations = [];
+        let flagsPlaced = 0;
+        let cellsRevealed = 0;
+        let timer = 0;
+        let timerInterval;
+        let isGameOver = false;
+        let firstClick = true;
+
+        // --- FUNÇÕES DE INICIALIZAÇÃO E CONTROLE ---
+
+        function initGame(difficulty) {
+            currentDifficulty = difficulty;
+            const config = DIFFICULTIES[difficulty];
+            isGameOver = true; 
+            clearInterval(timerInterval);
+            timer = 0;
+            flagsPlaced = 0;
+            cellsRevealed = 0;
+            board = [];
+            mineLocations = [];
+            firstClick = true;
+            updateMineCounter();
+            updateTimer();
+            resetButtonEl.textContent = '🙂';
+            gridEl.innerHTML = '';
+            gridEl.style.gridTemplateColumns = `repeat(${config.cols}, var(--cell-size))`;
+            hintButton.disabled = true;
+
+            for (let r = 0; r < config.rows; r++) {
+                const row = [];
+                for (let c = 0; c < config.cols; c++) {
+                    const cell = {
+                        isMine: false,
+                        isRevealed: false,
+                        isFlagged: false,
+                        adjacentMines: 0,
+                        element: createCellElement(r, c)
+                    };
+                    row.push(cell);
+                    gridEl.appendChild(cell.element);
+                }
+                board.push(row);
+            }
+            isGameOver = false;
+        }
+        
+        function placeMines(initialRow, initialCol) {
+            const { rows, cols, mines } = DIFFICULTIES[currentDifficulty];
+            let minesToPlace = mines;
+            while (minesToPlace > 0) {
+                const r = Math.floor(Math.random() * rows);
+                const c = Math.floor(Math.random() * cols);
+                if ((r === initialRow && c === initialCol) || board[r][c].isMine) continue;
+                board[r][c].isMine = true;
+                mineLocations.push({r, c});
+                minesToPlace--;
+            }
+        }
+
+        function calculateAdjacentMines() {
+            const { rows, cols } = DIFFICULTIES[currentDifficulty];
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    if (board[r][c].isMine) continue;
+                    let count = 0;
+                    for (let dr = -1; dr <= 1; dr++) {
+                        for (let dc = -1; dc <= 1; dc++) {
+                            if (dr === 0 && dc === 0) continue;
+                            const nr = r + dr;
+                            const nc = c + dc;
+                            if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && board[nr][nc].isMine) {
+                                count++;
+                            }
+                        }
+                    }
+                    board[r][c].adjacentMines = count;
+                }
+            }
+        }
+
+        // --- FUNÇÕES DE INTERAÇÃO DO USUÁRIO ---
+        
+        function handleCellClick(row, col) {
+            if (isGameOver || board[row][col].isRevealed || board[row][col].isFlagged) return;
+            
+            if (firstClick) {
+                placeMines(row, col);
+                calculateAdjacentMines();
+                startTimer();
+                firstClick = false;
+                hintButton.disabled = false;
+            }
+            
+            clearHintHighlight();
+            const cell = board[row][col];
+            if (cell.isMine) {
+                gameOver(false, row, col);
+                return;
+            }
+            revealCell(row, col);
+            checkWinCondition();
+        }
+
+        function handleRightClick(event, row, col) {
+            event.preventDefault();
+            if (isGameOver || board[row][col].isRevealed) return;
+            
+            const cell = board[row][col];
+            cell.isFlagged = !cell.isFlagged;
+            flagsPlaced += cell.isFlagged ? 1 : -1;
+            
+            clearHintHighlight();
+            renderCell(cell);
+            updateMineCounter();
+        }
+        
+        function revealCell(r, c) {
+            const { rows, cols } = DIFFICULTIES[currentDifficulty];
+            if (r < 0 || r >= rows || c < 0 || c >= cols) return;
+            const cell = board[r][c];
+            if (cell.isRevealed || cell.isFlagged) return;
+            
+            cell.isRevealed = true;
+            cellsRevealed++;
+            renderCell(cell);
+            
+            if (cell.adjacentMines === 0) {
+                for (let dr = -1; dr <= 1; dr++) {
+                    for (let dc = -1; dc <= 1; dc++) {
+                        if (dr === 0 && dc === 0) continue;
+                        revealCell(r + dr, c + dc);
+                    }
+                }
+            }
+        }
+        
+        // --- LÓGICA DE VITÓRIA/DERROTA E RENDERIZAÇÃO ---
+        
+        function checkWinCondition() {
+            const { rows, cols, mines } = DIFFICULTIES[currentDifficulty];
+            if (cellsRevealed === (rows * cols) - mines) {
+                gameOver(true);
+            }
+        }
+
+        function gameOver(isWin, clickedRow, clickedCol) {
+            isGameOver = true;
+            clearInterval(timerInterval);
+            resetButtonEl.textContent = isWin ? '😎' : '😵';
+            hintButton.disabled = true;
+            clearHintHighlight();
+
+            mineLocations.forEach(({r, c}) => {
+                board[r][c].isRevealed = true;
+                if (r === clickedRow && c === clickedCol) {
+                    board[r][c].element.classList.add('mine-hit');
+                }
+                renderCell(board[r][c]);
+            });
+        }
+
+        // --- FUNÇÕES DE ELEMENTOS E RENDERIZAÇÃO ---
+
+        function createCellElement(row, col) {
+            const cellEl = document.createElement('div');
+            cellEl.classList.add('cell');
+            cellEl.addEventListener('click', () => handleCellClick(row, col));
+            cellEl.addEventListener('contextmenu', (e) => handleRightClick(e, row, col));
+            cellEl.addEventListener('mousedown', (e) => {
+                if (e.button === 0 && !isGameOver) resetButtonEl.textContent = '😮';
+            });
+            cellEl.addEventListener('mouseup', () => {
+                if (!isGameOver) resetButtonEl.textContent = '🙂';
+            });
+            return cellEl;
+        }
+
+        function renderCell(cell) {
+            cell.element.innerHTML = '';
+            cell.element.className = 'cell'; 
+
+            if (cell.isRevealed) {
+                cell.element.classList.add('revealed');
+                if (cell.isMine) {
+                    cell.element.textContent = '💣';
+                } else if (cell.adjacentMines > 0) {
+                    cell.element.textContent = cell.adjacentMines;
+                    cell.element.classList.add(`c${cell.adjacentMines}`);
+                }
+            } else if (cell.isFlagged) {
+                cell.element.textContent = '🚩';
+            }
+        }
+        
+        // --- FUNÇÕES DE TEMPORIZADOR E CONTADOR ---
+
+        function updateMineCounter() {
+            const minesLeft = DIFFICULTIES[currentDifficulty].mines - flagsPlaced;
+            mineCounterEl.textContent = String(minesLeft).padStart(3, '0');
+        }
+
+        function updateTimer() {
+            timerEl.textContent = String(timer).padStart(3, '0');
+        }
+
+        function startTimer() {
+            if(timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                if (timer < 999) {
+                    timer++;
+                    updateTimer();
+                }
+            }, 1000);
+        }
+
+        // --- LÓGICA DA DICA COM IA (GEMINI API) ---
+        
+        async function getAiHint() {
+            if (isGameOver || firstClick) return;
+
+            hintButton.disabled = true;
+            hintButton.textContent = 'A pensar...';
+            clearHintHighlight();
+
+            // 1. Converter o tabuleiro para um formato de texto
+            const boardString = board.map(row => 
+                row.map(cell => {
+                    if (cell.isFlagged) return 'F';
+                    if (!cell.isRevealed) return 'H';
+                    return String(cell.adjacentMines);
+                }).join('')
+            ).join('\n');
+
+            // 2. Preparar o pedido para a API Gemini
+            const prompt = `Você é um perito em Campo Minado. Analise o seguinte estado do tabuleiro e determine a jogada única mais segura e lógica. O tabuleiro é representado por um array 2D de caracteres: 'H' para oculto, 'F' para bandeira, e '0'-'8' para células reveladas. Forneça as coordenadas (linha, coluna) da melhor célula para clicar e uma explicação muito breve, numa frase, para a sua escolha em Português. Se nenhuma jogada for 100% segura, sugira a célula com a maior probabilidade de estar segura. Aqui está o tabuleiro:\n${boardString}`;
+            
+            let chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+            const payload = {
+              contents: chatHistory,
+              generationConfig: {
+                  responseMimeType: "application/json",
+                  responseSchema: {
+                      type: "OBJECT",
+                      properties: {
+                          row: { "type": "NUMBER", description: "A coordenada da linha (a começar em 0) da célula sugerida." },
+                          col: { "type": "NUMBER", description: "A coordenada da coluna (a começar em 0) da célula sugerida." },
+                          reasoning: { "type": "STRING", description: "Uma explicação breve, numa frase, para a sugestão em Português." }
+                      },
+                      required: ["row", "col", "reasoning"]
+                  }
+              }
+            };
+
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+            // 3. Chamar a API e processar a resposta
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Erro da API: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                
+                if (result.candidates && result.candidates.length > 0) {
+                    const text = result.candidates[0].content.parts[0].text;
+                    const hint = JSON.parse(text);
+                    
+                    // Exibir a dica
+                    highlightHint(hint.row, hint.col);
+                    showHintModal(hint.reasoning);
+                } else {
+                     showHintModal("Não foi possível obter uma dica da IA neste momento.");
+                }
+
+            } catch (error) {
+                console.error("Erro ao obter dica da IA:", error);
+                showHintModal("Ocorreu um erro ao contactar a IA. Tente novamente.");
+            } finally {
+                hintButton.disabled = false;
+                hintButton.textContent = '✨ Dica Inteligente';
+            }
+        }
+
+        function highlightHint(row, col) {
+            if(board[row] && board[row][col]) {
+               board[row][col].element.classList.add('hint-highlight');
+            }
+        }
+        
+        function clearHintHighlight() {
+            const highlighted = document.querySelector('.hint-highlight');
+            if (highlighted) {
+                highlighted.classList.remove('hint-highlight');
+            }
+        }
+        
+        function showHintModal(reasoning) {
+            hintReasoningEl.textContent = reasoning;
+            hintModal.style.display = 'flex';
+        }
+
+        function hideHintModal() {
+            hintModal.style.display = 'none';
+            clearHintHighlight();
+        }
+
+        // --- EVENT LISTENERS ---
+        resetButtonEl.addEventListener('click', () => initGame(currentDifficulty));
+        document.getElementById('easy').addEventListener('click', () => initGame('easy'));
+        document.getElementById('medium').addEventListener('click', () => initGame('medium'));
+        document.getElementById('hard').addEventListener('click', () => initGame('hard'));
+        hintButton.addEventListener('click', getAiHint);
+        closeModalButton.addEventListener('click', hideHintModal);
+        hintModal.addEventListener('click', (e) => {
+            if (e.target === hintModal) hideHintModal();
+        });
+
+
+        // --- INICIAR O JOGO ---
+        window.onload = () => initGame('easy');
+    </script>
+</body>
+</html>
